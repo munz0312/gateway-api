@@ -2,15 +2,12 @@ use axum::{
     Router,
     body::Body,
     extract::State,
-    http::{Request, StatusCode, Uri},
+    http::{Request, StatusCode},
     response::{IntoResponse, Response},
 };
 
-use hyper_util::{
-    client::legacy::{
-        connect::HttpConnector, Client
-    }, rt::TokioExecutor
-};
+use http::{HeaderMap, Method};
+use reqwest::Client;
 use std::{sync::Arc};
 use tower::ServiceBuilder;
 use tracing::{info, error};
@@ -18,7 +15,7 @@ use tracing_subscriber;
 
 #[derive(Clone)]
 struct AppState {
-    client: Client<HttpConnector, Body>,
+    client: Client,
     backend_url: String,
 }
 
@@ -26,9 +23,12 @@ struct AppState {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let client: Client<HttpConnector, Body> = Client::builder(TokioExecutor::new()).build_http();
+   let client = Client::builder()
+    .use_rustls_tls()
+    .build()
+    .unwrap();
 
-    let backend_url = "http://httpbin.org".to_string();
+    let backend_url = "http://www.httpcan.org".to_string();
 
     let state = Arc::new(AppState {
         client,
@@ -55,7 +55,9 @@ async fn main() {
 
 async fn proxy_handler(
     State(state): State<Arc<AppState>>,
-    mut req: Request<Body>
+    method: Method,
+    headers: HeaderMap,
+    mut req: Request<Body>, 
 ) -> Result<Response, ProxyError> {
     let path = req.uri().path();
     let query = req.uri().query().map(|q| format!("?{}", q)).unwrap_or_default();
@@ -67,45 +69,67 @@ async fn proxy_handler(
         req.uri(),
         backend_uri);
 
-    let uri = backend_uri.parse::<Uri>()
-    .map_err(|e| ProxyError::InvalidUri(e.to_string()))?;
-
-    *req.uri_mut() = uri;
-
-    let headers = req.headers_mut();
-    headers.remove("connection");
-    headers.remove("keep-alive");
-    headers.remove("proxy-authenticate");
-    headers.remove("proxy-authorization");
-    headers.remove("te");
-    headers.remove("trailers");
-    headers.remove("transfer-encoding");
-    headers.remove("upgrade");
-
-    let response = state.client
-    .request(req)
+    let body_bytes = axum::body::to_bytes(req.into_body(), usize::MAX)
     .await
-    .map_err(|e| ProxyError::BackendError(e.to_string()))?;
+    .map_err(|e| ProxyError::BodyError(e.to_string()))?;    
 
-    Ok(response.into_response())
+    let mut client_req = state.client.request(method.clone(), backend_uri);
+
+    if !body_bytes.is_empty() {
+        client_req = client_req.body(body_bytes);
+    }
+
+    let request = client_req.build().unwrap();
+
+    info!("Headers sent to backend:");
+    for (key, value) in request.headers().iter() {
+        info!("  {}: {:?}", key, value);
+    }
+
+    let response = state.client.execute(request).await.unwrap();
+
+    info!("Version: {:?}", response.version());
+
+    let status = response.status();
+    let response_headers = response.headers().clone();
+    let body_bytes = response.bytes()
+        .await
+        .map_err(|e| ProxyError::BackendError(e.to_string()))?;
+
+    let mut axum_response = Response::builder()
+        .status(status);
+
+    for (key, value) in response_headers.iter() {
+        axum_response = axum_response.header(key, value);
+    }
+
+    let response = axum_response
+        .body(Body::from(body_bytes))
+        .map_err(|e| ProxyError::ResponseError(e.to_string()))?;
+    Ok(response)
 }
 
 #[derive(Debug)]
 enum ProxyError {
-    InvalidUri(String),
     BackendError(String),
+    BodyError(String),
+    ResponseError(String),
 }
 
 impl IntoResponse for ProxyError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            ProxyError::InvalidUri(msg) => {
-                error!("Invalid URI: {}", msg);
-                (StatusCode::BAD_REQUEST, format!("Invalid URI: {}", msg))
-            }
             ProxyError::BackendError(msg) => {
                 error!("Backend error: {}", msg);
                 (StatusCode::BAD_GATEWAY, format!("Backend error: {}", msg))
+            }
+            ProxyError::BodyError(msg) => {
+                error!("Body error: {}", msg);
+                (StatusCode::BAD_REQUEST, format!("Body error: {}", msg))
+            }
+            ProxyError::ResponseError(msg) => {
+                error!("Response error: {}", msg);
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Response error: {}", msg))
             }
         };
 
