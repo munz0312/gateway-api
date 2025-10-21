@@ -1,0 +1,14 @@
+{
+    "routes": [
+        {
+            "path": "/bin",
+            "backend_url": "http://httpbin.org"
+        },
+        {
+            "path": "/can",
+            "backend_url": "http://httpcan.org"
+        }
+ 
+    ]
+}
+    

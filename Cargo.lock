@@ -258,6 +258,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "reqwest",
+ "serde_json",
  "tokio",
  "tower",
  "tower-http",
