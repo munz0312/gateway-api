@@ -1,8 +1,14 @@
 use std::sync::Arc;
 
-use axum::{body::Body, extract::State, response::Response};
-use http::{HeaderMap, Method, Request};
+use axum::{
+    Json,
+    body::Body,
+    extract::State,
+    response::{IntoResponse, Response},
+};
+use http::{HeaderMap, Method, Request, StatusCode};
 use reqwest::RequestBuilder;
+use serde_json::json;
 use tracing::info;
 
 use crate::{error::ProxyError, router::match_route, state::AppState};
@@ -13,7 +19,6 @@ pub async fn proxy_handler(
     headers: HeaderMap,
     req: Request<Body>,
 ) -> Result<Response, ProxyError> {
-    
     let path = req.uri().path();
     let query = req
         .uri()
@@ -21,9 +26,8 @@ pub async fn proxy_handler(
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
 
-    let matched = match_route(&state.routes, path) 
-        .unwrap();
-    
+    let matched = match_route(&state.routes, path).unwrap();
+
     let backend_url = &matched.backend_url;
     let backend_path = path.strip_prefix(&matched.path).unwrap();
 
@@ -84,4 +88,15 @@ pub async fn proxy_handler(
         .body(Body::from(body_bytes))
         .map_err(|e| ProxyError::ResponseError(e.to_string()))?;
     Ok(response)
+}
+
+#[axum_macros::debug_handler]
+pub async fn health_check() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "status": "healthy",
+            "service": "gateway-api"
+        })),
+    )
 }

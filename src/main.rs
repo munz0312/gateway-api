@@ -1,17 +1,17 @@
-mod error;
-mod state;
 mod config;
-mod router;
+mod error;
 mod proxy;
+mod router;
+mod state;
 
 use crate::proxy::proxy_handler;
 use crate::state::AppState;
 
 use axum::Router;
+use axum::routing::get;
 use std::sync::Arc;
 use tower::ServiceBuilder;
 use tracing::info;
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() {
@@ -19,9 +19,9 @@ async fn main() {
     let state = Arc::new(AppState::new());
 
     let app = Router::new()
+        .route("/health", get(proxy::health_check))
         .fallback(proxy_handler)
-        .layer(ServiceBuilder::new()
-            .layer(tower_http::trace::TraceLayer::new_for_http()))
+        .layer(ServiceBuilder::new().layer(tower_http::trace::TraceLayer::new_for_http()))
         .with_state(state);
 
     let addr = "127.0.0.1:3000";
@@ -33,4 +33,3 @@ async fn main() {
 
     axum::serve(listener, app).await.unwrap();
 }
-
