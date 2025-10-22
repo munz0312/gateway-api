@@ -1,62 +1,22 @@
-use axum::{
-    Router,
-    body::Body,
-    extract::State,
-    http::{Request, StatusCode},
-    response::{IntoResponse, Response},
-};
+mod error;
+mod state;
+mod config;
+mod router;
+mod proxy;
 
-use serde_json::{self, Value};
-use std::fs;
+use crate::proxy::proxy_handler;
+use crate::state::AppState;
 
-use http::{HeaderMap, Method};
-use reqwest::{Client, RequestBuilder};
+use axum::Router;
 use std::sync::Arc;
 use tower::ServiceBuilder;
-use tracing::{error, info};
+use tracing::info;
 use tracing_subscriber;
-
-#[derive(Clone)]
-struct AppState {
-    client: Client,
-    routes: Vec<Route>,
-}
-
-#[derive(Clone)]
-struct Route {
-    path: String,
-    backend_url: String,
-}
-
-fn get_routes() -> Vec<Route> {
-    let config = fs::read_to_string("config.json").expect("Couldn't read config file");
-    let config: Value = serde_json::from_str(config.as_str()).unwrap();
-    let routes = config["routes"].as_array().unwrap();
-
-    routes
-        .iter()
-        .map(|v| Route {
-            path: v["path"].as_str().unwrap_or_default().to_string(),
-            backend_url: v["backend_url"].as_str().unwrap_or_default().to_string(),
-        })
-        .collect()
-}
-
-fn match_route<'a>(routes: &'a Vec<Route>, path: &str) -> Option<&'a Route> {
-    routes
-    .iter()
-    .find(|route| path.starts_with(&route.path))
-}
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    let client = Client::builder()
-        .use_rustls_tls()
-        .build()
-        .unwrap();
-    let routes = get_routes();
-    let state = Arc::new(AppState { client, routes });
+    let state = Arc::new(AppState::new());
 
     let app = Router::new()
         .fallback(proxy_handler)
@@ -74,112 +34,3 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn proxy_handler(
-    State(state): State<Arc<AppState>>,
-    method: Method,
-    headers: HeaderMap,
-    req: Request<Body>,
-) -> Result<Response, ProxyError> {
-    
-    let path = req.uri().path();
-    let query = req
-        .uri()
-        .query()
-        .map(|q| format!("?{}", q))
-        .unwrap_or_default();
-
-    let matched = match_route(&state.routes, path) 
-        .unwrap();
-    
-    let backend_url = &matched.backend_url;
-    let backend_path = path.strip_prefix(&matched.path).unwrap();
-
-    let backend_uri = format!("{}{}{}", backend_url, backend_path, query);
-    info!("Proxying {} {} -> {}", req.method(), req.uri(), backend_uri);
-
-    let body_bytes = axum::body::to_bytes(req.into_body(), usize::MAX)
-        .await
-        .map_err(|e| ProxyError::BodyError(e.to_string()))?;
-
-    let mut client_req = state.client.request(method.clone(), backend_uri);
-
-    if !body_bytes.is_empty() {
-        client_req = client_req.body(body_bytes);
-    }
-
-    for (key, value) in headers.iter() {
-        let key_str = key.as_str();
-        if key_str == "host"
-            || key_str == "connection"
-            || key_str == "keep-alive"
-            || key_str == "proxy-authenticate"
-            || key_str == "proxy-authorization"
-            || key_str == "te"
-            || key_str == "trailers"
-            || key_str == "transfer-encoding"
-            || key_str == "upgrade"
-        {
-            continue;
-        }
-
-        client_req = client_req.header(key, value);
-    }
-
-    info!("Headers sent by client:");
-    for (key, value) in headers.iter() {
-        info!("  {}: {:?}", key, value);
-    }
-
-    let response = RequestBuilder::send(client_req).await.unwrap();
-
-    info!("Version: {:?}", response.version());
-
-    let status = response.status();
-    let response_headers = response.headers().clone();
-    let body_bytes = response
-        .bytes()
-        .await
-        .map_err(|e| ProxyError::BackendError(e.to_string()))?;
-
-    let mut axum_response = Response::builder().status(status);
-
-    for (key, value) in response_headers.iter() {
-        axum_response = axum_response.header(key, value);
-    }
-
-    let response = axum_response
-        .body(Body::from(body_bytes))
-        .map_err(|e| ProxyError::ResponseError(e.to_string()))?;
-    Ok(response)
-}
-
-#[derive(Debug)]
-enum ProxyError {
-    BackendError(String),
-    BodyError(String),
-    ResponseError(String),
-}
-
-impl IntoResponse for ProxyError {
-    fn into_response(self) -> Response {
-        let (status, message) = match self {
-            ProxyError::BackendError(msg) => {
-                error!("Backend error: {}", msg);
-                (StatusCode::BAD_GATEWAY, format!("Backend error: {}", msg))
-            }
-            ProxyError::BodyError(msg) => {
-                error!("Body error: {}", msg);
-                (StatusCode::BAD_REQUEST, format!("Body error: {}", msg))
-            }
-            ProxyError::ResponseError(msg) => {
-                error!("Response error: {}", msg);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Response error: {}", msg),
-                )
-            }
-        };
-
-        (status, message).into_response()
-    }
-}
