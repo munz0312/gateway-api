@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use std::{fs};
+use std::{fs, os::linux::raw::stat};
 use serde_json::{self, Value};
 
 use http::{HeaderMap, Method};
@@ -19,9 +19,10 @@ use tracing_subscriber;
 #[derive(Clone)]
 struct AppState {
     client: Client,
-    backend_url: String,
+    routes: Vec<Route>,
 }
 
+#[derive(Clone)]
 struct Route {
     path: String,
     backend_url: String,
@@ -34,8 +35,14 @@ fn get_routes() -> Vec<Route> {
 
     routes.iter().map(|v| {
         Route {
-            path: v["path"].as_str().unwrap().to_string(),
-            backend_url: v["backend_url"].as_str().unwrap().to_string(),
+            path: v["path"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+            backend_url: v["backend_url"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
         }
     }).collect()
 }
@@ -52,7 +59,7 @@ async fn main() {
     
     let state = Arc::new(AppState {
         client,
-        backend_url,
+        routes,
     });
 
     let app = Router::new()
@@ -82,9 +89,16 @@ async fn proxy_handler(
         .query()
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
+    
+    let matched = &state.routes.iter().find(|route| {
+        path.starts_with(&route.path)
+    })
+    .unwrap();
 
-    let backend_uri = format!("{}{}{}", state.backend_url, path, query);
+    let backend_url = &matched.backend_url;
+    let backend_path = path.strip_prefix(&matched.path).unwrap();
 
+    let backend_uri = format!("{}{}{}", backend_url, backend_path, query);
     info!("Proxying {} {} -> {}", req.method(), req.uri(), backend_uri);
 
     let body_bytes = axum::body::to_bytes(req.into_body(), usize::MAX)
