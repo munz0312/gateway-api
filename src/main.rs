@@ -6,11 +6,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use std::{fs, os::linux::raw::stat};
 use serde_json::{self, Value};
+use std::fs;
 
 use http::{HeaderMap, Method};
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder};
 use std::sync::Arc;
 use tower::ServiceBuilder;
 use tracing::{error, info};
@@ -30,41 +30,38 @@ struct Route {
 
 fn get_routes() -> Vec<Route> {
     let config = fs::read_to_string("config.json").expect("Couldn't read config file");
-    let config: Value = serde_json::from_str(config.as_str()).unwrap();    
+    let config: Value = serde_json::from_str(config.as_str()).unwrap();
     let routes = config["routes"].as_array().unwrap();
 
-    routes.iter().map(|v| {
-        Route {
-            path: v["path"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string(),
-            backend_url: v["backend_url"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string(),
-        }
-    }).collect()
+    routes
+        .iter()
+        .map(|v| Route {
+            path: v["path"].as_str().unwrap_or_default().to_string(),
+            backend_url: v["backend_url"].as_str().unwrap_or_default().to_string(),
+        })
+        .collect()
+}
+
+fn match_route<'a>(routes: &'a Vec<Route>, path: &str) -> Option<&'a Route> {
+    routes
+    .iter()
+    .find(|route| path.starts_with(&route.path))
 }
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-
-    let client = Client::builder().use_rustls_tls().build().unwrap();
-
+    let client = Client::builder()
+        .use_rustls_tls()
+        .build()
+        .unwrap();
     let routes = get_routes();
-    
-    let backend_url = routes[0].backend_url.clone();
-    
-    let state = Arc::new(AppState {
-        client,
-        routes,
-    });
+    let state = Arc::new(AppState { client, routes });
 
     let app = Router::new()
         .fallback(proxy_handler)
-        .layer(ServiceBuilder::new().layer(tower_http::trace::TraceLayer::new_for_http()))
+        .layer(ServiceBuilder::new()
+            .layer(tower_http::trace::TraceLayer::new_for_http()))
         .with_state(state);
 
     let addr = "127.0.0.1:3000";
@@ -83,18 +80,17 @@ async fn proxy_handler(
     headers: HeaderMap,
     req: Request<Body>,
 ) -> Result<Response, ProxyError> {
+    
     let path = req.uri().path();
     let query = req
         .uri()
         .query()
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
-    
-    let matched = &state.routes.iter().find(|route| {
-        path.starts_with(&route.path)
-    })
-    .unwrap();
 
+    let matched = match_route(&state.routes, path) 
+        .unwrap();
+    
     let backend_url = &matched.backend_url;
     let backend_path = path.strip_prefix(&matched.path).unwrap();
 
@@ -129,19 +125,12 @@ async fn proxy_handler(
         client_req = client_req.header(key, value);
     }
 
-    let request = client_req.build().unwrap();
-
     info!("Headers sent by client:");
     for (key, value) in headers.iter() {
         info!("  {}: {:?}", key, value);
     }
 
-    info!("Headers sent to backend:");
-    for (key, value) in request.headers().iter() {
-        info!("  {}: {:?}", key, value);
-    }
-
-    let response = state.client.execute(request).await.unwrap();
+    let response = RequestBuilder::send(client_req).await.unwrap();
 
     info!("Version: {:?}", response.version());
 
