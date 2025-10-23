@@ -6,6 +6,7 @@ use axum::{
     extract::State,
     response::{IntoResponse, Response},
 };
+use axum_client_ip::{ClientIp, ClientIpSource};
 use http::{HeaderMap, Method, Request, StatusCode};
 use reqwest::RequestBuilder;
 use serde_json::json;
@@ -15,6 +16,7 @@ use crate::{error::ProxyError, router::match_route, state::AppState};
 
 pub async fn proxy_handler(
     State(state): State<Arc<AppState>>,
+    ClientIp(ip): ClientIp,
     method: Method,
     headers: HeaderMap,
     req: Request<Body>,
@@ -25,7 +27,7 @@ pub async fn proxy_handler(
         .query()
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
-
+    println!("{}", ip.to_string());
     let matched = match_route(&state.routes, path).unwrap();
 
     let backend_url = &matched.backend_url;
@@ -90,7 +92,6 @@ pub async fn proxy_handler(
     Ok(response)
 }
 
-#[axum_macros::debug_handler]
 pub async fn health_check() -> impl IntoResponse {
     (
         StatusCode::OK,

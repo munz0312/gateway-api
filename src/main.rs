@@ -9,6 +9,8 @@ use crate::state::AppState;
 
 use axum::Router;
 use axum::routing::get;
+use axum_client_ip::ClientIpSource;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tower::ServiceBuilder;
 use tracing::info;
@@ -21,7 +23,11 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(proxy::health_check))
         .fallback(proxy_handler)
-        .layer(ServiceBuilder::new().layer(tower_http::trace::TraceLayer::new_for_http()))
+        .layer(
+            ServiceBuilder::new()
+                .layer(ClientIpSource::ConnectInfo.into_extension())
+                .layer(tower_http::trace::TraceLayer::new_for_http()),
+        )
         .with_state(state);
 
     let addr = "127.0.0.1:3000";
@@ -31,5 +37,10 @@ async fn main() {
     info!("Proxy server listening on {}", addr);
     info!("Forwarding requests to backend");
 
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
