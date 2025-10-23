@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 
 use axum::{
     Json,
@@ -6,7 +6,8 @@ use axum::{
     extract::State,
     response::{IntoResponse, Response},
 };
-use axum_client_ip::{ClientIp, ClientIpSource};
+use axum_client_ip::ClientIp;
+use axum_client_ip::ClientIpSource;
 use http::{HeaderMap, Method, Request, StatusCode};
 use reqwest::RequestBuilder;
 use serde_json::json;
@@ -27,7 +28,9 @@ pub async fn proxy_handler(
         .query()
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
-    println!("{}", ip.to_string());
+
+    println!("Client IP: {}", ip);
+    println!("X-Forwarded-For: {:?}", headers.get("x-forwarded-for"));
     let matched = match_route(&state.routes, path).unwrap();
 
     let backend_url = &matched.backend_url;
@@ -92,7 +95,7 @@ pub async fn proxy_handler(
     Ok(response)
 }
 
-pub async fn health_check() -> impl IntoResponse {
+pub async fn health_check(ClientIp(ip): ClientIp) -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(json!({

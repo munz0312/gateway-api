@@ -1,5 +1,5 @@
-use reqwest::Client;
 use crate::config::get_routes;
+use reqwest::Client;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -14,14 +14,10 @@ pub struct Route {
 }
 
 impl AppState {
-
     pub fn new() -> Self {
-    let client = Client::builder()
-        .use_rustls_tls()
-        .build()
-        .unwrap();
-    let routes = get_routes();
-    Self { client, routes }
+        let client = Client::builder().use_rustls_tls().build().unwrap();
+        let routes = get_routes();
+        Self { client, routes }
     }
-
 }
+
