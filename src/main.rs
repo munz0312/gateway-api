@@ -1,8 +1,10 @@
 mod config;
 mod error;
+mod models;
 mod proxy;
 mod router;
 mod state;
+mod storage;
 
 use crate::proxy::proxy_handler;
 use crate::state::AppState;
