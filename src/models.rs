@@ -43,18 +43,6 @@ pub struct SummaryMetrics {
     pub route_stats: HashMap<String, u64>,
 }
 
-impl SummaryMetrics {
-    pub fn new() -> Self {
-        SummaryMetrics {
-            total_requests: 0,
-            total_errors: 0,
-            active_connections: 0,
-            recent_logs: Vec::new(),
-            route_stats: HashMap::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WsMessage {

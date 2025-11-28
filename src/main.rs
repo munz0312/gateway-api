@@ -1,11 +1,14 @@
 mod config;
 mod error;
+mod handlers;
+mod metrics;
 mod models;
 mod proxy;
 mod router;
 mod state;
 mod storage;
 
+use crate::handlers::{get_logs, get_metrics, get_routes, websocket_handler};
 use crate::proxy::proxy_handler;
 use crate::state::AppState;
 
@@ -25,11 +28,15 @@ struct Server {}
 impl Server {
     async fn run(self) -> Result<(), std::io::Error> {
         tracing_subscriber::fmt::init();
+
         let state = Arc::new(AppState::new());
 
+        // Start metrics broadcasting
+        state.metrics_collector.clone().start_broadcasting().await;
+
         let governor_conf = GovernorConfigBuilder::default()
-            .per_second(5)
-            .burst_size(1)
+            .per_second(2)
+            .burst_size(5)
             .finish()
             .unwrap();
 
@@ -45,6 +52,11 @@ impl Server {
 
         let app = Router::new()
             .route("/health", get(proxy::health_check))
+            // NEW: API routes for monitoring dashboard
+            .route("/api/metrics", get(get_metrics))
+            .route("/api/logs", get(get_logs))
+            .route("/api/routes", get(get_routes))
+            .route("/ws", get(websocket_handler))
             .fallback(proxy_handler)
             .layer(GovernorLayer::new(governor_conf))
             .layer(
@@ -58,7 +70,9 @@ impl Server {
 
         let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
-        info!("Proxy server listening on {}", addr);
+        info!("Gateway API server with monitoring listening on {}", addr);
+        info!("Monitoring dashboard API available at http://{}/api/", addr);
+        info!("WebSocket endpoint available at ws://{}/ws", addr);
         info!("Forwarding requests to backend");
 
         axum::serve(

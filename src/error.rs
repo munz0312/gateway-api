@@ -7,7 +7,6 @@ pub enum ProxyError {
     BackendError(String),
     BodyError(String),
     ResponseError(String),
-    RateLimitExceeded(String),
 }
 
 impl IntoResponse for ProxyError {
@@ -26,13 +25,6 @@ impl IntoResponse for ProxyError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Response error: {}", msg),
-                )
-            }
-            ProxyError::RateLimitExceeded(msg) => {
-                error!("Rate limit exceeded: {}", msg);
-                (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    format!("Rate limit exceeded: {}", msg),
                 )
             }
         };

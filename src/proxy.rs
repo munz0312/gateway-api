@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     Json,
@@ -7,13 +7,13 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_client_ip::ClientIp;
-use axum_client_ip::ClientIpSource;
+use chrono::Utc;
 use http::{HeaderMap, Method, Request, StatusCode};
 use reqwest::RequestBuilder;
 use serde_json::json;
 use tracing::info;
 
-use crate::{error::ProxyError, router::match_route, state::AppState};
+use crate::{error::ProxyError, models::RequestLog, router::match_route, state::AppState};
 
 pub async fn proxy_handler(
     State(state): State<Arc<AppState>>,
@@ -22,15 +22,13 @@ pub async fn proxy_handler(
     headers: HeaderMap,
     req: Request<Body>,
 ) -> Result<Response, ProxyError> {
-    let path = req.uri().path();
-    let query = req
-        .uri()
-        .query()
-        .map(|q| format!("?{}", q))
-        .unwrap_or_default();
+    let start_time = Utc::now();
+    let uri = req.uri().clone();
+    let path = uri.path();
+    let query = uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
 
-    println!("Client IP: {}", ip);
-    println!("X-Forwarded-For: {:?}", headers.get("x-forwarded-for"));
+    // println!("Client IP: {}", ip);
+    // println!("X-Forwarded-For: {:?}", headers.get("x-forwarded-for"));
     let matched = match_route(&state.routes, path).unwrap();
 
     let backend_url = &matched.backend_url;
@@ -67,14 +65,14 @@ pub async fn proxy_handler(
         client_req = client_req.header(key, value);
     }
 
-    info!("Headers sent by client:");
-    for (key, value) in headers.iter() {
-        info!("  {}: {:?}", key, value);
-    }
+    //    info!("Headers sent by client:");
+    //    for (key, value) in headers.iter() {
+    //        info!("  {}: {:?}", key, value);
+    //    }
 
     let response = RequestBuilder::send(client_req).await.unwrap();
 
-    info!("Version: {:?}", response.version());
+    // info!("Version: {:?}", response.version());
 
     let status = response.status();
     let response_headers = response.headers().clone();
@@ -92,10 +90,26 @@ pub async fn proxy_handler(
     let response = axum_response
         .body(Body::from(body_bytes))
         .map_err(|e| ProxyError::ResponseError(e.to_string()))?;
+
+    // Record metrics
+    let end_time = Utc::now();
+    let response_time = end_time.signed_duration_since(start_time);
+    let status_code = status.as_u16();
+
+    let log = RequestLog::new(
+        method.to_string(),
+        path.to_string(),
+        status_code,
+        response_time,
+        ip.to_string(),
+    );
+
+    state.metrics_store.add_request(log);
+
     Ok(response)
 }
 
-pub async fn health_check(ClientIp(ip): ClientIp) -> impl IntoResponse {
+pub async fn health_check(ClientIp(_ip): ClientIp) -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(json!({

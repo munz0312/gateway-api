@@ -21,6 +21,27 @@ pub struct MetricsStore {
     broadcaster: broadcast::Sender<WsMessage>,
 }
 
+impl Clone for MetricsStore {
+    fn clone(&self) -> Self {
+        Self {
+            request_logs: self.request_logs.clone(),
+            total_requests: AtomicU64::new(
+                self.total_requests
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            total_errors: AtomicU64::new(
+                self.total_errors.load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            active_connections: AtomicU64::new(
+                self.active_connections
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            route_stats: self.route_stats.clone(),
+            broadcaster: self.broadcaster.clone(),
+        }
+    }
+}
+
 impl MetricsStore {
     pub fn new() -> (Self, broadcast::Receiver<WsMessage>) {
         let (tx, rx) = broadcast::channel(100);
@@ -80,11 +101,12 @@ impl MetricsStore {
     pub fn get_broadcaster(&self) -> broadcast::Sender<WsMessage> {
         self.broadcaster.clone()
     }
-    pub fn increment_connections(&self) {
+
+    pub fn _increment_connections(&self) {
         self.active_connections.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn decrement_connections(&self) {
+    pub fn _decrement_connections(&self) {
         self.active_connections.fetch_sub(1, Ordering::Relaxed);
     }
 }
