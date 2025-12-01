@@ -12,9 +12,9 @@ use crate::models::{RequestLog, SummaryMetrics, WsMessage};
 
 pub struct MetricsStore {
     request_logs: Arc<RwLock<VecDeque<RequestLog>>>,
-    total_requests: AtomicU64,
-    total_errors: AtomicU64,
-    active_connections: AtomicU64,
+    total_requests: Arc<AtomicU64>,
+    total_errors: Arc<AtomicU64>,
+    active_connections: Arc<AtomicU64>,
 
     route_stats: Arc<RwLock<HashMap<String, u64>>>,
 
@@ -25,17 +25,9 @@ impl Clone for MetricsStore {
     fn clone(&self) -> Self {
         Self {
             request_logs: self.request_logs.clone(),
-            total_requests: AtomicU64::new(
-                self.total_requests
-                    .load(std::sync::atomic::Ordering::Relaxed),
-            ),
-            total_errors: AtomicU64::new(
-                self.total_errors.load(std::sync::atomic::Ordering::Relaxed),
-            ),
-            active_connections: AtomicU64::new(
-                self.active_connections
-                    .load(std::sync::atomic::Ordering::Relaxed),
-            ),
+            total_requests: self.total_requests.clone(),
+            total_errors: self.total_errors.clone(),
+            active_connections: self.active_connections.clone(),
             route_stats: self.route_stats.clone(),
             broadcaster: self.broadcaster.clone(),
         }
@@ -47,9 +39,9 @@ impl MetricsStore {
         let (tx, rx) = broadcast::channel(100);
         let store = Self {
             request_logs: Arc::new(RwLock::new(VecDeque::new())),
-            total_requests: AtomicU64::new(0),
-            total_errors: AtomicU64::new(0),
-            active_connections: AtomicU64::new(0),
+            total_requests: Arc::new(AtomicU64::new(0)),
+            total_errors: Arc::new(AtomicU64::new(0)),
+            active_connections: Arc::new(AtomicU64::new(0)),
             route_stats: Arc::new(RwLock::new(HashMap::new())),
             broadcaster: tx,
         };

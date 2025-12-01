@@ -4,7 +4,6 @@ use axum::{
     Json,
     extract::{Query, State, WebSocketUpgrade, ws::Message},
 };
-use futures_util::{SinkExt, StreamExt};
 
 use crate::{
     models::{LogQuery, RequestLog, SummaryMetrics},
@@ -37,35 +36,34 @@ pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> axum::response::Response {
-    ws.on_upgrade(|socket| async move {
+    ws.on_upgrade(|mut socket| async move {
         let mut rx = state.metrics_store.get_broadcaster().subscribe();
 
-        let (mut sender, mut receiver) = socket.split();
-
-        tokio::spawn(async move {
-            while let Some(msg) = receiver.next().await {
-                if let Ok(msg) = msg {
+        loop {
+            tokio::select! {
+                // Handle incoming WebSocket messages (client -> server)
+                msg = socket.recv() => {
                     match msg {
-                        Message::Close(_) => break, // Close message
-                        Message::Ping(data) => {
-                            // Respond to ping with pong
-                            let _ = sender.send(Message::Pong(data)).await;
+                        Some(Ok(Message::Close(_))) | None => break,
+                        Some(Ok(Message::Ping(data))) => {
+                            if socket.send(Message::Pong(data)).await.is_err() {
+                                break;
+                            }
                         }
-                        _ => {
-                            // Handle other message types or ignore
+                        _ => {} // Ignore others
+                    }
+                }
+                // Handle internal broadcast messages (server -> client)
+                msg = rx.recv() => {
+                    if let Ok(msg) = msg {
+                        if let Ok(json) = serde_json::to_string(&msg) {
+                            if socket.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
                         }
                     }
                 }
             }
-        });
-        tokio::spawn(async move {
-            while let Ok(msg) = rx.recv().await {
-                if let Ok(json) = serde_json::to_string(&msg) {
-                    // Note: We can't use sender here as it was moved
-                    // For now, just log the message
-                    tracing::debug!("Broadcasting message: {}", json);
-                }
-            }
-        });
+        }
     })
 }
