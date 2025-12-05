@@ -10,6 +10,7 @@ use tokio::sync::broadcast;
 
 use crate::models::{RequestLog, SummaryMetrics, WsMessage};
 
+#[derive(Clone)]
 pub struct MetricsStore {
     request_logs: Arc<RwLock<VecDeque<RequestLog>>>,
     total_requests: Arc<AtomicU64>,
@@ -19,19 +20,6 @@ pub struct MetricsStore {
     route_stats: Arc<RwLock<HashMap<String, u64>>>,
 
     broadcaster: broadcast::Sender<WsMessage>,
-}
-
-impl Clone for MetricsStore {
-    fn clone(&self) -> Self {
-        Self {
-            request_logs: self.request_logs.clone(),
-            total_requests: self.total_requests.clone(),
-            total_errors: self.total_errors.clone(),
-            active_connections: self.active_connections.clone(),
-            route_stats: self.route_stats.clone(),
-            broadcaster: self.broadcaster.clone(),
-        }
-    }
 }
 
 impl MetricsStore {
