@@ -1,42 +1,229 @@
 #root {
-  max-width: 1280px;
+  width: 100%; 
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
+  text-align: left;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 90vh;
+  gap: 1rem;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #333;
+}
+
+.connection-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: bold;
+}
+
+.connection-status.connected {
+  background-color: #1b5e20;
+  color: #a5d6a7;
+}
+
+.connection-status.connecting {
+  background-color: #f57f17;
+  color: #fff9c4;
+}
+
+.connection-status.disconnected {
+  background-color: #b71c1c;
+  color: #ffcdd2;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.filters {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filters button {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  color: #ddd;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.filters button.active {
+  background-color: #646cff;
+  border-color: #646cff;
+  color: white;
+}
+
+.clear-btn {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  color: #ddd;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+}
+
+.clear-btn:hover {
+  background-color: #b71c1c;
+  border-color: #b71c1c;
+  color: white;
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  scrollbar-gutter: stable; 
+}
+
+.empty-state {
   text-align: center;
+  color: #666;
+  margin-top: 2rem;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.message-wrapper {
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.message-wrapper.type-NewLog {
+  background-color: #252526;
+  border-left: 4px solid #00acc1;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.message-wrapper.type-MetricsUpdate {
+  background-color: #2d2d2d;
+  border-left: 4px solid #7c4dff;
 }
 
-.card {
-  padding: 2em;
+/* Log Entry Styles */
+.log-entry {
+  display: grid;
+  grid-template-columns: 100px 80px 1fr 60px 80px 120px;
+  align-items: center;
+  gap: 1rem;
 }
 
-.read-the-docs {
+.timestamp {
   color: #888;
+}
+
+.method {
+  font-weight: bold;
+}
+
+.method.get { color: #61affe; }
+.method.post { color: #49cc90; }
+.method.put { color: #fca130; }
+.method.delete { color: #f93e3e; }
+
+.path {
+  color: #e6e6e6;
+  word-break: break-all;
+}
+
+.status {
+  font-weight: bold;
+}
+.status-200, .status-201, .status-204 { color: #49cc90; }
+.status-301, .status-302, .status-304 { color: #61affe; }
+.status-400, .status-401, .status-404 { color: #fca130; }
+.status-500, .status-502, .status-503 { color: #f93e3e; }
+
+.duration {
+  color: #dcdcaa;
+  text-align: right;
+}
+
+.ip {
+  color: #888;
+  text-align: right;
+}
+
+/* Metrics Entry Styles */
+.metrics-entry h4 {
+  margin: 0 0 0.5rem 0;
+  color: #7c4dff;
+}
+
+.metrics-grid {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #444;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-item label {
+  font-size: 0.8rem;
+  color: #ccc; 
+}
+
+.metric-item span {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #ffffff; 
+}
+
+/* ... existing route-stats styles ... */
+
+.route-stats h5 {
+  margin: 0.5rem 0;
+  color: #eeeeee; 
+}
+
+.route-stats ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.route-stats li {
+  background-color: #333;
+  padding: 0.25rem 0.5rem;
+  border-radius: 2px;
+  display: flex;
+  justify-content: space-between;
+  color: #ffffff; 
+}
+
+.route-stats li span:first-child { /* Route path e.g. /bin */
+  color: #ffffff; 
+}
+
+.route-stats li span:last-child { 
+  font-weight: bold;
+  color: #ffffff; 
 }
