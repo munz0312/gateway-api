@@ -14,7 +14,7 @@ A Rust-based API Gateway that functions as a reverse proxy, routing incoming HTT
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable version)
-- [Node.js](https://nodejs.org/en/download) (only if you want the logging monitor UI - see below)
+- [Node.js](https://nodejs.org/en/download) (only if you want the logging dashboard  - see below)
 
 ## Configuration
 
@@ -47,7 +47,7 @@ The routing logic is defined in `config.json`. Example structure:
 cargo run
 ```
 
-You can also run it with the RUST_LOG environment variable set to `info` to see some logs in the terminal.
+You can also run it with the `RUST_LOG` environment variable set to `info` to see some logs in the terminal.
 
 ```bash
 RUST_LOG=info cargo run
@@ -55,7 +55,7 @@ RUST_LOG=info cargo run
 
 The server will start on `127.0.0.1:3000`.
 
-Define the allowed routes in the `config.json` file, then you can send requests to it using some HTTP client.
+Ensure you have defined the desired allowed routes in the `config.json` file, then you can send requests to it using some HTTP client.
 
 ```bash
 curl localhost:3000/bin/get
@@ -86,15 +86,17 @@ cargo run --example ws_monitor
 
 This script connects to the WebSocket endpoint and prints live traffic logs and metric updates to the terminal.
 
-## Logging UI
+## Dashboard 
+
+A nicer way to view summary metrics and incoming requests.
 
 ```bash
-cd frontend
+cd proxy-dashboard 
 npm install
 npm run dev
 ```
 
-This will start a React app on `localhost:5173` which will display the logs coming in via WebSocket.
+This will start a Next.js app on `localhost:3001` which will display the logs coming in via WebSocket.
 
 ## License
 
